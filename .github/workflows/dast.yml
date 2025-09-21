@@ -8,16 +8,6 @@ on:
 jobs:
   zap_scan:
     runs-on: ubuntu-latest
-    services:
-      web:
-        image: devsecops-app
-        ports:
-          - 5000:5000
-        options: >-
-          --health-cmd="curl --fail http://localhost:5000 || exit 1"
-          --health-interval=5s
-          --health-timeout=2s
-          --health-retries=10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,11 +15,20 @@ jobs:
       - name: Build Docker image
         run: docker build -t devsecops-app .
 
+      - name: Run app container
+        run: docker run -d -p 5000:5000 --name web devsecops-app
+
       - name: Wait for service
         run: sleep 20
 
       - name: Run OWASP ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.10.0
+        run: |
+          docker run --network host -v ${{ github.workspace }}:/zap/wrk/:rw \
+            owasp/zap2docker-stable zap-baseline.py \
+            -t http://127.0.0.1:5000 -a -r zap_report.html
+
+      - name: Upload ZAP Report
+        uses: actions/upload-artifact@v4
         with:
-          target: "http://localhost:5000"
-          cmd_options: "-a"
+          name: zap-report
+          path: zap_report.html
