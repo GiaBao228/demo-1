@@ -8,29 +8,45 @@ on:
 jobs:
   zap_scan:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Build Docker image
       - name: Build Docker image
         run: docker build -t devsecops-app .
 
+      # Run container
       - name: Run app container
         run: docker run -d -p 5000:5000 --name web devsecops-app
 
+      # Wait for service to start
       - name: Wait for service
         run: sleep 20
 
+      # Run OWASP ZAP Baseline Scan
       - name: Run OWASP ZAP Baseline Scan
         run: |
           docker run --rm --network host \
             -v ${{ github.workspace }}:/zap/wrk/:rw \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t http://127.0.0.1:5000 -a -r zap_report.html || true
+            zap-baseline.py -t http://127.0.0.1:5000 \
+                            -a \
+                            -r zap_report.html \
+                            -m 1
 
+      # Verify report file
       - name: Verify ZAP Report
-        run: ls -l zap_report.html || echo "⚠️ zap_report.html not found"
+        run: |
+          if [ -f zap_report.html ]; then
+            echo "✅ ZAP report generated"
+          else
+            echo "❌ ZAP report missing"
+            exit 1
+          fi
 
+      # Upload report as artifact
       - name: Upload ZAP Report
         uses: actions/upload-artifact@v4
         with:
